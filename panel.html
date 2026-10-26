@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>WorkBuddy2API · 控制台</title>
+<style>
+:root{
+  --card:rgba(255,255,255,.66); --line:rgba(100,116,139,.42); --text:#1E293B;
+  --muted:#55657E; --accent:#0f766e; --ok:#16a34a; --warn:#d97706; --bad:#dc2626;
+  --radius:16px; --radius-sm:10px;
+  --shadow:0 8px 24px rgba(30,41,59,.08), inset 0 1px 0 rgba(255,255,255,.95);
+  --blur:14px;
+  --font-sans:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',sans-serif;
+  --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,'Courier New',monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;color:var(--text);font:14px/1.55 var(--font-sans);-webkit-font-smoothing:antialiased;
+  background:
+    radial-gradient(900px 480px at 8% -8%, rgba(153,246,228,.5), transparent),
+    radial-gradient(820px 440px at 96% 2%, rgba(191,219,254,.5), transparent),
+    radial-gradient(760px 420px at 55% 112%, rgba(221,214,254,.42), transparent),
+    linear-gradient(180deg,#F6FBFA,#ECF4F3)}
+button{font:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
+::selection{background:color-mix(in srgb,var(--accent) 28%,transparent)}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:rgba(100,116,139,.35);border-radius:99px}
+::-webkit-scrollbar-track{background:transparent}
+.wrap{max-width:1080px;margin:0 auto;padding:26px 18px 52px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:22px}
+.brand{display:flex;align-items:center;gap:13px}
+.logo{width:42px;height:42px;border-radius:14px;background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 55%,#fff));display:grid;place-items:center;font-weight:800;color:#fff;box-shadow:var(--shadow);font-family:var(--font-mono);letter-spacing:-.5px}
+.brand h1{margin:0;font-size:20px;letter-spacing:.2px;font-weight:600;color:#0F172A}
+.brand p{margin:2px 0 0;color:var(--muted);font-size:12px}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:rgba(255,255,255,.75);color:#334155;padding:8px 13px;border-radius:var(--radius-sm);cursor:pointer;transition:border-color .18s,background .18s,transform .12s,box-shadow .18s;box-shadow:0 2px 8px rgba(30,41,59,.05)}
+.btn:hover{border-color:color-mix(in srgb,var(--accent) 55%,var(--line));background:#fff;transform:translateY(-1px);box-shadow:var(--shadow)}
+.btn:active{transform:translateY(0)}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.btn.primary{background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 78%,#fff));border-color:transparent;color:#fff;font-weight:700;box-shadow:0 4px 16px color-mix(in srgb,var(--accent) 32%,transparent)}
+.btn.primary:hover{filter:brightness(1.05)}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}
+@media (max-width:900px){.grid{grid-template-columns:1fr}}
+.stat{position:relative;overflow:hidden;background:var(--card);border:1px solid rgba(255,255,255,.8);border-radius:var(--radius);padding:15px 16px 13px;box-shadow:var(--shadow);backdrop-filter:blur(var(--blur));-webkit-backdrop-filter:blur(var(--blur))}
+.stat::before{content:"";position:absolute;inset:0 auto 0 0;width:4px;background:linear-gradient(180deg,var(--accent),transparent);border-radius:4px}
+.stat .k{color:var(--muted);font-size:12px;font-weight:600}
+.stat .v{font-size:22px;font-weight:700;margin-top:5px;letter-spacing:-.5px;font-variant-numeric:tabular-nums;line-height:1.1;color:#0F172A;word-break:break-all}
+.stat .sub{font-size:11px;color:var(--muted);margin-top:3px}
+.card{background:var(--card);border:1px solid rgba(255,255,255,.85);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;margin-bottom:16px;backdrop-filter:blur(var(--blur));-webkit-backdrop-filter:blur(var(--blur))}
+.card-h{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.35)}
+.card-h h2{margin:0;font-size:15px;font-weight:600;color:#0F172A}
+.card-b{padding:12px 16px}
+.kv{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:7px 0;border-bottom:1px solid rgba(100,116,139,.15)}
+.kv:last-child{border-bottom:none}
+.kv .k{color:var(--muted);font-size:13px;white-space:nowrap}
+.kv .v{font-weight:600;font-variant-numeric:tabular-nums;text-align:right;word-break:break-all}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:700;border:1px solid transparent}
+.badge::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.badge.ok{background:rgba(22,163,74,.12);color:#15803d;border-color:rgba(22,163,74,.3)}
+.badge.bad{background:rgba(220,38,38,.1);color:#b91c1c;border-color:rgba(220,38,38,.28)}
+.badge.info{background:rgba(15,118,110,.1);color:#0f766e;border-color:rgba(15,118,110,.28)}
+.mono{font-family:var(--font-mono);font-size:12px}
+.muted{color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;max-height:320px;overflow:auto}
+.chip{background:rgba(255,255,255,.8);border:1px solid var(--line);border-radius:999px;padding:4px 11px;font-size:12px;color:var(--muted);font-family:var(--font-mono);white-space:nowrap}
+.chip.tools{border-color:rgba(22,163,74,.3);color:#15803d;background:rgba(22,163,74,.05)}
+.chip.dead{border-color:rgba(220,38,38,.3);color:#b91c1c;background:rgba(220,38,38,.05);text-decoration:line-through}
+.toast{position:fixed;right:16px;bottom:16px;max-width:420px;background:rgba(255,255,255,.92);border:1px solid rgba(255,255,255,.9);color:var(--text);padding:12px 15px;border-radius:var(--radius-sm);box-shadow:0 16px 40px rgba(30,41,59,.14);opacity:0;transform:translateY(8px);transition:.22s;z-index:50;pointer-events:none;font-size:13px;backdrop-filter:blur(10px)}
+.toast.show{opacity:1;transform:none}
+.foot{margin-top:10px;color:var(--muted);font-size:12px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.btn:hover{transform:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="brand">
+      <div class="logo">WB</div>
+      <div>
+        <h1>WorkBuddy2API</h1>
+        <p id="subTitle">凭证 · 模型 · 用量</p>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn" id="btnRefresh">刷新状态</button>
+      <button class="btn" id="btnProbe">探测可调性</button>
+      <button class="btn primary" id="btnToken">刷新令牌</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="stat">
+      <div class="k">凭证状态</div>
+      <div class="v" id="sCred">—</div>
+      <div class="sub" id="sCredSub"></div>
+    </div>
+    <div class="stat">
+      <div class="k">账号</div>
+      <div class="v" id="sAccount">—</div>
+      <div class="sub" id="sAccountSub"></div>
+    </div>
+    <div class="stat">
+      <div class="k">可用模型</div>
+      <div class="v" id="sModels">—</div>
+      <div class="sub" id="sModelsSub"></div>
+    </div>
+    <div class="stat">
+      <div class="k">本账号可调</div>
+      <div class="v" id="sProbe">—</div>
+      <div class="sub" id="sProbeSub">上游目录会列本账号调不动的模型，需实调才能区分</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-h"><h2>凭证详情</h2><span class="muted mono" id="updatedAt"></span></div>
+    <div class="card-b">
+      <div class="kv"><span class="k">昵称</span><span class="v" id="credNick">—</span></div>
+      <div class="kv"><span class="k">UID</span><span class="v mono" id="credUid">—</span></div>
+      <div class="kv"><span class="k">账号域</span><span class="v mono" id="credDomain">—</span></div>
+      <div class="kv"><span class="k">令牌有效期</span><span class="v" id="credRemain">—</span></div>
+      <div class="kv"><span class="k">本地鉴权</span><span class="v" id="credLocalAuth">—</span></div>
+      <div class="kv"><span class="k">用量提示</span><span class="v muted" id="credUsageNote">—</span></div>
+      <div class="kv"><span class="k">提示</span><span class="v muted" id="credNotice">—</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-h"><h2>模型列表</h2><span class="muted" id="modelCount"></span></div>
+    <div class="card-b"><div class="chips" id="modelChips"></div></div>
+  </div>
+
+  <div class="foot">
+    <span>OpenAI Base URL: <span class="mono" id="baseUrl"></span></span>
+    <span>API: <span class="mono">/v1/chat/completions</span></span>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+function toast(msg, ok=true){
+  const t = $("toast");
+  t.textContent = msg;
+  t.style.borderColor = ok ? "rgba(34,197,94,.4)" : "rgba(239,68,68,.45)";
+  t.classList.add("show");
+  clearTimeout(t._tm);
+  t._tm = setTimeout(()=>t.classList.remove("show"), 3200);
+}
+
+function escapeHtml(s){
+  return String(s??"").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+}
+
+async function api(path, opts={}){
+  const headers = Object.assign({"Content-Type":"application/json"}, opts.headers||{});
+  const res = await fetch(path, Object.assign({}, opts, {headers}));
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = {raw:text}; }
+  if (!res.ok){
+    const msg = (data && (data.error?.message || data.message)) || text || res.statusText;
+    throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+  }
+  return data;
+}
+
+function render(data){
+  const cred = data.credential || {};
+  const models = data.models || [];
+  const valid = !!cred.valid;
+
+  $("sCred").innerHTML = valid
+    ? '<span class="badge ok">有效</span>'
+    : '<span class="badge bad">不可用</span>';
+  $("sCredSub").textContent = cred.remain_text || "";
+  $("sAccount").textContent = cred.nickname || "未命名";
+  $("sAccountSub").textContent = cred.uid ? (cred.uid.slice(0,8) + "…") : "";
+  $("sModels").textContent = models.length;
+  const tools = models.filter(m => m.tools).length;
+  const images = models.filter(m => m.images).length;
+  $("sModelsSub").textContent = `${tools} 支持工具 / ${images} 支持图像`;
+
+  const pr = data.probe || {};
+  $("sProbe").innerHTML = pr.done
+    ? (pr.unavailable ? `<span class="badge bad">${pr.done - pr.unavailable}/${pr.total}</span>`
+                      : `<span class="badge ok">${pr.done}/${pr.total}</span>`)
+    : `<span class="badge info">未探测</span>`;
+  if (pr.done) {
+    $("sProbeSub").textContent = `已探测 ${pr.done} 个，其中 ${pr.unavailable} 个调不动（400/11102）`;
+  }
+  $("credUsageNote").textContent = data.usage_note || "—";
+
+  $("credNick").textContent = cred.nickname || "—";
+  $("credUid").textContent = cred.uid || "—";
+  $("credDomain").textContent = cred.domain || "—";
+  $("credRemain").textContent = cred.remain_text || "—";
+  $("credLocalAuth").textContent = data.local_auth ? "已开启（API_KEY）" : "未开启（仅回环）";
+  $("credNotice").textContent = cred.notice || "正常";
+  $("updatedAt").textContent = "更新于 " + new Date().toLocaleTimeString("zh-CN");
+
+  $("modelCount").textContent = models.length + " 个";
+  $("modelChips").innerHTML = models.length
+    ? models.map(m => `<span class="chip${m.tools ? " tools" : ""}${m.callable === false ? " dead" : ""}" title="${escapeHtml(m.vendor)} ${escapeHtml(m.credits)}${m.efforts && m.efforts.length ? " · 档位 " + escapeHtml(m.efforts.join("/")) : ""}${m.callable === false ? " · 本账号不可调" : m.callable === true ? " · 已验证可调" : ""}">${escapeHtml(m.id)}</span>`).join("")
+    : `<span class="muted">暂无模型</span>`;
+
+  $("baseUrl").textContent = location.origin + "/v1";
+  $("subTitle").textContent = (cred.domain || "workbuddy") + " · " + models.length + " 模型";
+}
+
+async function loadOverview(){
+  const data = await api("/admin/api/overview");
+  render(data);
+  return data;
+}
+
+$("btnRefresh").onclick = async () => {
+  try { await loadOverview(); toast("已刷新"); } catch(e){ toast(e.message, false); }
+};
+
+$("btnProbe").onclick = async () => {
+  $("btnProbe").disabled = true;
+  $("sProbeSub").textContent = "正在逐模型发极小请求（max_tokens=8）…";
+  try {
+    const data = await api("/admin/api/probe-models", {method:"POST", body: JSON.stringify({force:true})});
+    toast(data.message || "探测完成");
+    await loadOverview();
+  } catch(e){
+    toast("探测失败: " + e.message, false);
+    $("sProbeSub").textContent = "探测失败";
+  } finally {
+    $("btnProbe").disabled = false;
+  }
+};
+
+$("btnToken").onclick = async () => {
+  $("btnToken").disabled = true;
+  try {
+    const data = await api("/admin/api/refresh-token", {method:"POST", body:"{}"});
+    toast(data.message || "令牌已刷新");
+    await loadOverview();
+  } catch(e){
+    toast("刷新失败: " + e.message, false);
+  } finally {
+    $("btnToken").disabled = false;
+  }
+};
+
+loadOverview().catch(e => toast("加载失败: " + e.message, false));
+</script>
+</body>
+</html>
