@@ -1,5 +1,7 @@
 # WorkBuddy2api (Go)
 
+![Go](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey) ![Type](https://img.shields.io/badge/type-API%20Gateway-blue)
+
 WorkBuddy 转 OpenAI / Anthropic 兼容 API 的 Go 网关实现。
 
 ## 构建
