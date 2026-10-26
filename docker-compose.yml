@@ -1,0 +1,22 @@
+services:
+  workbuddy2api:
+    build: .
+    container_name: workbuddy2api
+    restart: unless-stopped
+    ports:
+      - "8377:8377"
+    environment:
+      - API_KEY=${API_KEY}
+      - HOST=${HOST:-0.0.0.0}
+      - PORT=${PORT:-8377}
+      - WB2API_STATE_DIR=${WB2API_STATE_DIR:-/app/data}
+      - DUMP=${DUMP}
+      - DUMP_DIR=${DUMP_DIR:-/app/data/dump}
+    volumes:
+      - ./data:/app/data
+    networks:
+      - workbuddy2api_net
+
+networks:
+  workbuddy2api_net:
+    driver: bridge
