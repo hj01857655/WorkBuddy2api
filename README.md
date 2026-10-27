@@ -36,6 +36,6 @@ cp .env.example .env   # 按需填写
 docker compose up -d
 ```
 
-镜像同时发布到 GHCR：`ghcr.io/hj01857655/hj01857655/WorkBuddy2api`（跟随 v* 标签发布，含 latest，linux/amd64 + linux/arm64）。
+镜像同时发布到 GHCR：`ghcr.io/hj01857655/workbuddy2api`（跟随 v* 标签发布，含 latest，linux/amd64 + linux/arm64）。
 
 二进制发版：推送 `v*` 标签后 Actions 自动构建 linux / windows / darwin 的 amd64 + arm64 六平台产物并发布 Release。
