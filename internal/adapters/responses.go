@@ -761,7 +761,7 @@ func ChatJSONToResponsesLimited(chat map[string]any, model string, maxToolCalls 
 				}
 			}
 			if calls >= maxCalls {
-				st.finishReason = "length"
+				st.truncatedTools = true
 				break
 			}
 		}
@@ -781,6 +781,10 @@ func ChatJSONToResponsesLimited(chat map[string]any, model string, maxToolCalls 
 			asString(fn["name"]), asString(fn["arguments"]), "completed"))
 	}
 
+	if st.truncatedTools {
+		return st.responseObj("incomplete", st.usage, nil,
+			map[string]any{"reason": "max_tool_calls"})
+	}
 	if st.finishReason == "length" {
 		return st.responseObj("incomplete", st.usage, nil,
 			map[string]any{"reason": "max_output_tokens"})
