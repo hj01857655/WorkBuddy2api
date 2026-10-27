@@ -22,6 +22,7 @@ go build -o workbuddy2api .
 ## 接口
 
 - `GET /health` — 健康检查
+- `GET /admin` — Web 管理面板（内置，开箱即用）：凭据状态 / 双槽概览、模型目录与可调性、令牌刷新、模型探测。状态目录放一份自定义 `panel.html` 可覆盖内置版
 - `GET /v1/models` — 模型列表
 - `POST /v1/chat/completions` — OpenAI Chat 兼容
 - `POST /v1/messages` — Anthropic Messages 兼容

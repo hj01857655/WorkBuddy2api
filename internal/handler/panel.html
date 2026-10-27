@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WorkBuddy2api</title>
+<style>
+:root{--bg:#0f1115;--card:#181b22;--line:#262b36;--tx:#e6e9ef;--dim:#8b93a3;--ok:#4ade80;--bad:#f87171;--warn:#fbbf24;--acc:#6ea8fe}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.6 "Segoe UI",system-ui,sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:18px;margin:0 0 4px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:16px;flex-wrap:wrap}
+.tabs button{background:none;border:none;color:var(--dim);padding:8px 14px;cursor:pointer;font-size:14px;border-bottom:2px solid transparent}
+.tabs button.on{color:var(--acc);border-bottom-color:var(--acc)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
+.card h3{margin:0 0 10px;font-size:14px}
+.kv{display:grid;grid-template-columns:110px 1fr;gap:4px 12px;font-size:13px}
+.kv b{color:var(--dim);font-weight:400}
+button{background:var(--acc);border:none;border-radius:6px;color:#0b1220;padding:7px 14px;cursor:pointer;font-size:13px;font-weight:600}
+button.ghost{background:none;border:1px solid var(--line);color:var(--tx);font-weight:400}
+button:disabled{opacity:.45;cursor:default}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+th{color:var(--dim);font-weight:400}
+.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}.dim{color:var(--dim)}
+.badge{display:inline-block;border-radius:99px;padding:1px 9px;font-size:11px;font-weight:600}
+.badge.on{background:#14321f;color:var(--ok)}.badge.off{background:#321414;color:var(--bad)}
+.mono{font-family:Consolas,monospace;font-size:12px}
+#msg{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1f2430;border:1px solid var(--line);border-radius:8px;padding:10px 18px;font-size:13px;display:none;max-width:80vw}
+input{background:#0d0f13;border:1px solid var(--line);border-radius:6px;color:var(--tx);padding:7px 10px;font-size:13px;width:180px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>WorkBuddy2api 控制台</h1>
+<div class="tabs">
+<button class="on" onclick="tab(this,'vMain')">概览</button>
+<button onclick="tab(this,'vDiag')">诊断</button>
+</div>
+<div id="vMain"></div>
+<div id="vDiag" style="display:none"></div>
+</div>
+<div id="msg"></div>
+<script>
+"use strict";
+const $=s=>document.querySelector(s);
+function authHeaders(){const k=localStorage.wb_apikey;if(!k)return{"Content-Type":"application/json"};return{"Content-Type":"application/json","Authorization":"Bearer "+k}}
+const api=(p,opt={})=>fetch("/admin/api/"+p,Object.assign({headers:authHeaders()},opt)).then(r=>r.json()).catch(e=>({ok:false,message:String(e)}));
+const POST=(p,b)=>api(p,{method:"POST",body:JSON.stringify(b||{})});
+let tt;function toast(t,bad){const m=$("#msg");m.textContent=t;m.style.display="block";m.style.color=bad?"var(--bad)":"var(--tx)";clearTimeout(tt);tt=setTimeout(()=>m.style.display="none",3500)}
+function esc(s){const d=document.createElement("div");d.textContent=s==null?"":String(s);return d.innerHTML}
+function tab(btn,id){document.querySelectorAll(".tabs button").forEach(b=>b.classList.remove("on"));btn.classList.add("on");
+  $("#vMain").style.display=id==="vMain"?"":"none";$("#vDiag").style.display=id==="vDiag"?"":"none"}
+
+async function load(){
+  const o=await api("overview");
+  if(!o.credential){$("#vMain").innerHTML='<div class="card bad">overview 加载失败</div>';return}
+  const c=o.credential,pr=o.probe||{};
+  $("#vMain").innerHTML=`
+  <div class="card"><h3>凭据</h3><div class="kv">
+    <b>状态</b><span class="${c.valid?"ok":"bad"}">${c.valid?"有效":"无效"}${c.notice?" — "+esc(c.notice):""}</span>
+    <b>用户</b><span>${esc(c.nickname||"—")} <span class="dim mono">${esc(c.uid||"")}</span></span>
+    <b>域</b><span>${esc(c.realm_label||c.realm||"—")} <span class="dim mono">${esc(c.domain||"")}</span></span>
+    <b>有效期</b><span>${esc(c.remain_text||"—")}</span>
+    <b>本地鉴权</b><span>${o.local_auth?`<span class="badge on">API_KEY 已开启</span> <input id="k" placeholder="API Key" value="${esc(localStorage.wb_apikey||"")}"> <button class="ghost" onclick="localStorage.wb_apikey=document.getElementById('k').value;toast('已保存')">保存</button>`:'<span class="badge off">未开启（仅回环）</span>'}</span>
+  </div></div>
+  <div class="card"><h3>双槽凭据</h3>${(o.realms||[]).map(r=>`<div class="kv" style="margin-bottom:8px">
+    <b>${esc(r.realm||r.label||"?")}</b><span class="${r.valid?"ok":"dim"}">${r.valid?"有效":"缺"} ${esc(r.remain_text||"")} <span class="dim mono">${esc(r.uid||"")}</span></span></div>`).join("")||'<span class="dim">无</span>'}</div>
+  <div class="card"><h3>模型 ${pr.total?`<span class="dim">（探测 ${pr.total-pr.unavailable}/${pr.total} 可调）</span>`:""}</h3>
+    <table><tr><th>模型</th><th>厂商</th><th>credits</th><th>能力</th><th>探测</th></tr>
+    ${(o.models||[]).map(m=>`<tr><td>${esc(m.name||m.id)}<div class="dim mono" style="font-size:11px">${esc(m.id)}</div></td>
+    <td class="dim">${esc(m.vendor||"—")}</td><td>${esc(m.credits??"—")}</td>
+    <td>${m.tools?'<span class="chip">工具</span>':""}${m.images?'<span class="chip">图像</span>':""}</td>
+    <td>${m.callable===true?'<span class="ok">可调</span>':m.callable===false?'<span class="bad">不可调</span>':'<span class="dim">未探测</span>'}</td></tr>`).join("")}</table></div>
+  ${o.usage_note?`<div class="card dim" style="font-size:12px">注：${esc(o.usage_note)}</div>`:""}`;
+  $("#vDiag").innerHTML=`
+  <div class="card"><h3>凭据</h3><button onclick="doRefresh(this)">刷新令牌</button> <span id="rfOut"></span></div>
+  <div class="card"><h3>模型探测</h3><button class="ghost" onclick="doProbe(this)">逐模型实调探测（发小请求，消耗少量 credit）</button><div id="pbOut" style="margin-top:10px"></div></div>`;
+}
+async function doRefresh(btn){btn.disabled=true;const r=await POST("refresh-token");
+  $("#rfOut").innerHTML=`<span class="${r.ok?"ok":"bad"}">${esc(r.message||"")}</span>`;btn.disabled=false;load()}
+async function doProbe(btn){btn.disabled=true;const r=await POST("probe-models",{force:true});
+  $("#pbOut").innerHTML=(r.results||[]).map(x=>`<div class="${x.callable?"ok":"bad"}">${x.callable?"✓":"✗"} ${esc(x.id)} <span class="dim">${esc(x.note||"")}</span></div>`).join("")||`<span class="${r.ok?"ok":"bad"}">${esc(r.message||"")}</span>`;
+  btn.disabled=false}
+load();
+</script>
+</body>
+</html>

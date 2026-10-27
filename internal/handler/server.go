@@ -509,13 +509,7 @@ func (s *Server) panelOr404(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	body, err := os.ReadFile(s.Cfg.PanelPath)
-	if err != nil {
-		http.Error(w, "panel.html 缺失: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write(body)
+	s.servePanel(w)
 }
 
 // ── 日志：request.log 2MB×3 轮转 + stdout（与 Python RotatingFileHandler 对齐）──
