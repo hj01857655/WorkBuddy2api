@@ -13,3 +13,4 @@ credentials.json
 .env.*
 sessions.json
 sessions.json.tmp
+exp/

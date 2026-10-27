@@ -71,6 +71,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/api/overview", s.adminOverview)
 	mux.HandleFunc("/admin/api/refresh-token", s.adminRefreshToken)
 	mux.HandleFunc("/admin/api/probe-models", s.adminProbeModels)
+	mux.HandleFunc("/admin/api/quota", s.adminQuota)
 	return s.observe(mux)
 }
 
@@ -575,4 +576,19 @@ func (rw *rotateWriter) rotate() {
 	os.Rename(rw.path, rw.path+".1")
 	rw.written = 0
 	_ = rw.open()
+}
+
+func (s *Server) adminQuota(w http.ResponseWriter, r *http.Request) {
+	out := map[string]any{"ok": true, "realms": map[string]any{}}
+	realms := out["realms"].(map[string]any)
+	for _, realm := range []string{"intl", "cn"} {
+		data, err := s.WB.FetchQuota(realm)
+		if err != nil {
+			realms[realm] = map[string]any{"ok": false, "error": err.Error()}
+			continue
+		}
+		realms[realm] = map[string]any{"ok": true, "data": data}
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(out)
 }

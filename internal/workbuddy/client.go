@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -731,4 +732,68 @@ func marshalCompact(v any) ([]byte, error) {
 		return nil, err
 	}
 	return bytes.TrimRight(buf.Bytes(), "\n"), nil
+}
+
+// FetchQuota 查询账号积分额度（官方 /billing/meter/get-user-resource-summary）。
+// Python 实测（2026-10-27）：两 realm 均返回 Packages / CreditGroups / TotalCredits
+// / SubscriptionPackageName / IsPaidUser；企业口径 get-enterprise-user-usage 对
+// 非企业号返回 400，个人号不走那条链路。
+func (c *Client) FetchQuota(realm string) (map[string]any, error) {
+	account, err := c.Cred.Load(realm)
+	if err != nil {
+		return nil, err
+	}
+	base := c.Cred.APIOrigin(realm)
+	uid := account.UID
+	seed := sha256.Sum256([]byte(uid))
+	machine := hex.EncodeToString(seed[:])[:32]
+	h := map[string]string{
+		"Content-Type": "application/json", "Accept": "application/json, text/plain, */*",
+		"X-Requested-With":    "XMLHttpRequest",
+		"User-Agent":          "WorkBuddy/5.8.4",
+		"Authorization":       "Bearer " + account.Token,
+		"X-User-Id":           uid,
+		"X-CodeBuddy-Request": "1",
+		"X-Request-ID":        fmt.Sprintf("%x", sha256.Sum256([]byte(uid+fmt.Sprint(time.Now().UnixNano()))))[:32],
+		"X-Machine-ID":        machine,
+		"X-Session-ID":        machine,
+		"X-No-Enterprise-Id":  "1",
+		"X-Client-Platform":   "web",
+	}
+	if realm == "intl" {
+		h["Origin"] = "https://www.workbuddy.ai"
+		h["Referer"] = "https://www.workbuddy.ai/"
+		h["X-Domain"] = "www.workbuddy.ai"
+		h["Accept-Language"] = "en-US"
+	} else {
+		h["Origin"] = "https://www.codebuddy.cn"
+		h["Referer"] = "https://www.codebuddy.cn/"
+		h["X-Domain"] = "copilot.tencent.com"
+		h["Accept-Language"] = "zh-CN"
+		h["X-Product"] = "SaaS"
+	}
+	req, err := http.NewRequest(http.MethodPost, base+"/billing/meter/get-user-resource-summary", strings.NewReader("{}"))
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range h {
+		req.Header.Set(k, v)
+	}
+	resp, err := c.plainHTTP.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	var envelope struct {
+		Code int            `json:"code"`
+		Data map[string]any `json:"data"`
+	}
+	if json.Unmarshal(raw, &envelope) != nil {
+		return nil, fmt.Errorf("HTTP %d 非 JSON: %.120s", resp.StatusCode, string(raw))
+	}
+	if resp.StatusCode != 200 || envelope.Code != 0 {
+		return nil, fmt.Errorf("HTTP %d code=%d", resp.StatusCode, envelope.Code)
+	}
+	return envelope.Data, nil
 }
