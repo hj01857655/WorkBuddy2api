@@ -365,6 +365,22 @@ func AnthropicToChat(body map[string]any) map[string]any {
 	if ss, ok := body["stop_sequences"].([]any); ok && len(ss) > 0 {
 		chat["stop"] = ss
 	}
+	// top_k：上游无对应字段，直接丢弃（保留注释以便审计）
+	if v, ok := body["top_k"]; ok && v != nil {
+		_ = v
+	}
+	// thinking: {type:"enabled", budget_tokens:N} -> reasoning_effort（上游白名单字段）
+	if th := asMap(body["thinking"]); th != nil && asString(th["type"]) == "enabled" {
+		budget := asFloat(th["budget_tokens"])
+		switch {
+		case budget >= 24000:
+			chat["reasoning_effort"] = "high"
+		case budget >= 8000:
+			chat["reasoning_effort"] = "medium"
+		default:
+			chat["reasoning_effort"] = "low"
+		}
+	}
 	return chat
 }
 
@@ -451,6 +467,12 @@ func ChatJSONToAnthropic(chat map[string]any, model string) map[string]any {
 	}
 
 	contentBlocks := []any{}
+	// 思考内容 -> Anthropic thinking block（客户端据此展示推理过程）
+	if rc := asString(msg["reasoning_content"]); rc != "" {
+		contentBlocks = append(contentBlocks, map[string]any{
+			"type": "thinking", "thinking": rc, "signature": "sig_" + hexID(16),
+		})
+	}
 	if text := asString(msg["content"]); text != "" {
 		contentBlocks = append(contentBlocks, map[string]any{"type": "text", "text": text})
 	}
@@ -525,6 +547,7 @@ func ChatSSEToAnthropic(lines iter.Seq[string], model string) iter.Seq[[]byte] {
 			"cache_creation_input_tokens": 0, "cache_read_input_tokens": 0,
 		}
 		blocks := 0                 // 已开出的 content block 数
+		thinkIdx := -1              // 思考块下标（-1 = 还没开）
 		textIdx := -1               // 文本块下标（-1 = 还没开）
 		toolBlocks := map[int]int{} // chat tool_calls.index -> blocks 下标
 		finish := ""
@@ -547,6 +570,26 @@ func ChatSSEToAnthropic(lines iter.Seq[string], model string) iter.Seq[[]byte] {
 				usage = chunk.usage
 			}
 			finish = pickFinish(chunk, finish)
+
+			// 0) 思考 delta -> thinking block（Anthropic 规范：thinking 在 text 之前）
+			if rc := chunk.reasoningContent; rc != "" {
+				if thinkIdx < 0 {
+					thinkIdx = blocks
+					blocks++
+					if !yield(antFrame("content_block_start", map[string]any{
+						"index":         thinkIdx,
+						"content_block": map[string]any{"type": "thinking", "thinking": ""},
+					})) {
+						return
+					}
+				}
+				if !yield(antFrame("content_block_delta", map[string]any{
+					"index": thinkIdx,
+					"delta": map[string]any{"type": "thinking_delta", "thinking": rc},
+				})) {
+					return
+				}
+			}
 
 			// 1) 文本 delta
 			if ct := chunk.content; ct != "" {

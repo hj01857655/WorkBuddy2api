@@ -11,6 +11,7 @@
 package adapters
 
 import (
+	"encoding/json"
 	"iter"
 	"time"
 )
@@ -240,6 +241,31 @@ func ResponsesToChat(body map[string]any) map[string]any {
 	}
 	if tc := respToolChoiceToChat(body["tool_choice"]); tc != nil {
 		chat["tool_choice"] = tc
+	}
+	// text.format: {type:"json_schema", name, schema, strict} —— 上游无对应字段，
+	// 压成 system 指令约束输出（与 ZCode 同法，实测可出合法 JSON）。
+	if tf := asMap(body["text"]); tf != nil {
+		if format := asMap(tf["format"]); format != nil && asString(format["type"]) == "json_schema" {
+			schema, _ := json.Marshal(asMap(format["schema"]))
+			name := asString(format["name"])
+			hint := "You must answer with a single JSON object"
+			if name != "" {
+				hint += " named " + name
+			}
+			hint += " that strictly matches this JSON Schema (no markdown fence, no prose): " + string(schema)
+			msgs, _ := chat["messages"].([]any)
+			chat["messages"] = append([]any{map[string]any{
+				"role": "system", "content": hint,
+			}}, msgs...)
+		}
+	}
+	// store / include / conversation / metadata：上游无对应端点字段，按规范可忽略
+	// （客户端不应因此报错）。store=true 的会话存储由客户端自行维护。
+	// reasoning.effort -> reasoning_effort（上游白名单）
+	if rs := asMap(body["reasoning"]); rs != nil {
+		if effort := asString(rs["effort"]); effort != "" {
+			chat["reasoning_effort"] = effort
+		}
 	}
 	for src, dst := range map[string]string{
 		"temperature": "temperature", "top_p": "top_p",
@@ -658,6 +684,10 @@ func ChatJSONToResponses(chat map[string]any, model string) map[string]any {
 	}
 	if text := asString(msg["content"]); text != "" {
 		st.register(messageItem("msg_"+hexID(24), text, "completed"))
+	}
+	// refusal -> 独立 refusal item（OpenAI Responses 规范）
+	if rf := asString(msg["refusal"]); rf != "" {
+		st.register(map[string]any{"id": "ref_" + hexID(24), "type": "refusal", "refusal": rf, "status": "completed"})
 	}
 	for _, tci := range asList(msg["tool_calls"]) {
 		tc := asMap(tci)

@@ -429,9 +429,16 @@ func TestAnthropicNonStream(t *testing.T) {
 	if len(blocks) == 0 {
 		t.Fatalf("content 为空: %s", rec.Body.String())
 	}
-	block := blocks[0].(map[string]any)
-	if block["type"] != "text" || block["text"] != "你好" {
-		t.Fatalf("首个 content block = %v，要 text/你好", block)
+	// Anthropic 规范顺序：thinking 在前、text 在后；text block 必须存在且内容正确
+	var textBlock map[string]any
+	for _, b := range blocks {
+		if m, _ := b.(map[string]any); m != nil && m["type"] == "text" {
+			textBlock = m
+			break
+		}
+	}
+	if textBlock == nil || textBlock["text"] != "你好" {
+		t.Fatalf("content blocks = %v，要含 text/你好", blocks)
 	}
 	if _, ok := body["usage"].(map[string]any); !ok {
 		t.Fatalf("缺 usage: %s", rec.Body.String())
