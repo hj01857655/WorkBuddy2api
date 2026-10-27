@@ -279,6 +279,37 @@ func ResponsesToChat(body map[string]any) map[string]any {
 	return chat
 }
 
+// ResponsesToChatWithHistory 同 ResponsesToChat，但把会话历史（由网关 session 包
+// 依据 previous_response_id / conversation 取出）前置到 messages 之前。
+// history 为 Responses input items（response.output 的原样结构）。
+func ResponsesToChatWithHistory(body map[string]any, history []any) map[string]any {
+	chat := ResponsesToChat(body)
+	if len(history) == 0 {
+		return chat
+	}
+	msgs, _ := chat["messages"].([]any)
+	// 历史 items 走同一个转换器（它已支持 function_call / function_call_output /
+	// message 三类），转换后追加在本次 input 之前、system 之后。
+	histMsgs := respInputToMessages(map[string]any{"input": history})
+	merged := make([]any, 0, len(histMsgs)+len(msgs))
+	// 保留本请求开头的 system（instructions），再插历史，再放本次消息
+	inserted := false
+	for _, m := range msgs {
+		if mm, _ := m.(map[string]any); mm != nil && asString(mm["role"]) == "system" && !inserted {
+			merged = append(merged, m)
+			merged = append(merged, histMsgs...)
+			inserted = true
+			continue
+		}
+		merged = append(merged, m)
+	}
+	if !inserted {
+		merged = append(histMsgs, merged...)
+	}
+	chat["messages"] = merged
+	return chat
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // 二、响应侧公共：输出 item 构造 + usage 映射
 // ════════════════════════════════════════════════════════════════════════════

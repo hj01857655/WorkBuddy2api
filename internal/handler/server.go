@@ -20,6 +20,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"workbuddy2api/internal/session"
 
 	"workbuddy2api/internal/config"
 	"workbuddy2api/internal/cred"
@@ -43,6 +44,8 @@ type Server struct {
 	WB   *workbuddy.Client
 	Dump *dump.Writer
 	Log  *slog.Logger
+	// Sessions Responses API 的本地会话（previous_response_id / conversation / store）
+	Sessions *session.Store
 
 	reqSeq atomic.Int64
 }

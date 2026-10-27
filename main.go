@@ -17,7 +17,9 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
+	"workbuddy2api/internal/session"
 
 	"workbuddy2api/internal/checkin"
 	"workbuddy2api/internal/config"
@@ -80,6 +82,7 @@ func serve() {
 
 	store := cred.NewDefaultStore()
 	wb := workbuddy.NewClient(store, cfg.StateDir)
+	sessions := session.New(filepath.Join(cfg.StateDir, "sessions.json"))
 
 	// 凭证横幅：两个槽位都列出来，缺哪个一眼可见（对齐 Python __main__）
 	for _, row := range store.Status() {
@@ -115,7 +118,7 @@ func serve() {
 
 	go checkinLoop(logger)
 
-	srv := &handler.Server{Cfg: cfg, Cred: store, WB: wb, Dump: dw, Log: logger}
+	srv := &handler.Server{Cfg: cfg, Cred: store, WB: wb, Dump: dw, Log: logger, Sessions: sessions}
 	if err := http.ListenAndServe(addr, srv.Handler()); err != nil {
 		logger.Error("HTTP 服务退出", slog.String("err", err.Error()))
 		os.Exit(1)

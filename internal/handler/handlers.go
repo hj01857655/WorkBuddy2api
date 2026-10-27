@@ -12,6 +12,7 @@ import (
 
 	"workbuddy2api/internal/adapters"
 	"workbuddy2api/internal/cred"
+	"workbuddy2api/internal/session"
 	"workbuddy2api/internal/workbuddy"
 )
 
@@ -128,7 +129,21 @@ func (s *Server) responses(w http.ResponseWriter, r *http.Request) {
 		}})
 		return
 	}
-	chatBody := adapters.ResponsesToChat(info.payload)
+	// previous_response_id / conversation：从网关本地会话里取历史前置
+	prevID := asString(info.payload["previous_response_id"])
+	convID := ""
+	if c := info.payload["conversation"]; c != nil {
+		if cm, ok := c.(map[string]any); ok {
+			convID = asString(cm["id"])
+		} else {
+			convID = asString(c)
+		}
+	}
+	var history []any
+	if s.Sessions != nil {
+		history = s.Sessions.Chain(prevID, convID)
+	}
+	chatBody := adapters.ResponsesToChatWithHistory(info.payload, history)
 	// Python routes/responses.py：翻译后无 messages → 400（Responses 空 input 同错）
 	if msgs, ok := chatBody["messages"].([]any); !ok || len(msgs) == 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{
@@ -157,7 +172,48 @@ func (s *Server) responses(w http.ResponseWriter, r *http.Request) {
 	}
 	out := marshalCompact(adapters.ChatJSONToResponses(result, cc.model))
 	s.finishNonStream(info, out)
+	// store:true（默认 true）时保存会话，供 previous_response_id / conversation 续接
+	s.saveResponseSession(info.payload, out, cc.model)
 	writeJSONBody(w, out)
+}
+
+// saveResponseSession 把一次 Responses 响应存进本地会话（store 默认 true，
+// 与官方一致；显式 store:false 则不存）。
+func (s *Server) saveResponseSession(req map[string]any, out []byte, model string) {
+	if s.Sessions == nil {
+		return
+	}
+	if store, ok := req["store"].(bool); ok && !store {
+		return
+	}
+	var resp map[string]any
+	if json.Unmarshal(out, &resp) != nil {
+		return
+	}
+	id := asString(resp["id"])
+	if id == "" {
+		return
+	}
+	convID := ""
+	if c := req["conversation"]; c != nil {
+		if cm, ok := c.(map[string]any); ok {
+			convID = asString(cm["id"])
+		} else {
+			convID = asString(c)
+		}
+	}
+	outItems, _ := resp["output"].([]any)
+	inItems, _ := req["input"].([]any)
+	if inItems == nil {
+		if str, ok := req["input"].(string); ok && str != "" {
+			inItems = []any{map[string]any{"role": "user", "content": str}}
+		}
+	}
+	usage, _ := resp["usage"].(map[string]any)
+	s.Sessions.Save(&session.Record{
+		ID: id, Conversation: convID, Input: inItems, Output: outItems,
+		Model: model, Usage: usage,
+	})
 }
 
 // ── /v1/messages（Anthropic）───────────────────────────────────────────────
