@@ -170,7 +170,13 @@ func (s *Server) responses(w http.ResponseWriter, r *http.Request) {
 		s.failUpstream(w, info, err)
 		return
 	}
-	out := marshalCompact(adapters.ChatJSONToResponses(result, cc.model))
+	maxCalls := 0
+	if v, ok := info.payload["max_tool_calls"]; ok {
+		if f, ok2 := v.(float64); ok2 {
+			maxCalls = int(f)
+		}
+	}
+	out := marshalCompact(adapters.ChatJSONToResponsesLimited(result, cc.model, maxCalls))
 	s.finishNonStream(info, out)
 	// store:true（默认 true）时保存会话，供 previous_response_id / conversation 续接
 	s.saveResponseSession(info.payload, out, cc.model)

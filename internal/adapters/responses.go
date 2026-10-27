@@ -259,8 +259,26 @@ func ResponsesToChat(body map[string]any) map[string]any {
 			}}, msgs...)
 		}
 	}
-	// store / include / conversation / metadata：上游无对应端点字段，按规范可忽略
-	// （客户端不应因此报错）。store=true 的会话存储由客户端自行维护。
+	// store / conversation / previous_response_id：网关本地会话（internal/session）实现，
+	// 这里不翻译。include / metadata / service_tier / safety_identifier / background：
+	// 上游无对应字段，按规范可忽略（客户端不应因此报错）。
+	//
+	// truncation：{type:"auto"|"disabled"}。auto 时按 max_input_tokens 上限裁剪最早的
+	// 非 system 消息（上游无该字段，网关侧实现语义）。
+	if tr := asMap(body["truncation"]); tr != nil && asString(tr["type"]) == "auto" {
+		if limit := asFloat(tr["max_input_tokens"]); limit > 0 {
+			chat["messages"] = truncateMessages(chat["messages"], int(limit))
+		}
+	}
+	// max_tool_calls：限制一次响应内的工具调用次数（上游无该字段，网关侧限制）。
+	// 实现方式：把上限写进 system 提示，由模型自律；同时记录到 chat 供上游轮次判断。
+	if mt := asFloat(body["max_tool_calls"]); mt > 0 {
+		msgs, _ := chat["messages"].([]any)
+		chat["messages"] = append([]any{map[string]any{
+			"role":    "system",
+			"content": "You may call at most " + itoa(int(mt)) + " tool(s) in this turn.",
+		}}, msgs...)
+	}
 	// reasoning.effort -> reasoning_effort（上游白名单）
 	if rs := asMap(body["reasoning"]); rs != nil {
 		if effort := asString(rs["effort"]); effort != "" {
@@ -383,20 +401,21 @@ type respItemRef struct {
 }
 
 type respStreamState struct {
-	model         string
-	respID        string
-	createdAt     int64
-	seq           int
-	nextIdx       int
-	usage         map[string]any
-	finishReason  string
-	upstreamError *upstreamErr
-	interrupted   error
-	items         map[int]map[string]any
-	order         []int
-	reasoning     *respItemRef
-	text          *respItemRef
-	tools         map[int]*respToolState // chat tool_calls index
+	model          string
+	respID         string
+	createdAt      int64
+	seq            int
+	nextIdx        int
+	usage          map[string]any
+	finishReason   string
+	upstreamError  *upstreamErr
+	interrupted    error
+	items          map[int]map[string]any
+	order          []int
+	reasoning      *respItemRef
+	text           *respItemRef
+	tools          map[int]*respToolState // chat tool_calls index
+	truncatedTools bool                   // max_tool_calls 触发截断
 }
 
 func newRespStreamState(model string) *respStreamState {
@@ -690,6 +709,12 @@ func ChatSSEToResponses(lines SSELines, model string) iter.Seq[[]byte] {
 
 // ChatJSONToResponses 非流式 Chat Completions JSON -> Responses Response 对象。
 func ChatJSONToResponses(chat map[string]any, model string) map[string]any {
+	return ChatJSONToResponsesLimited(chat, model, 0)
+}
+
+// ChatJSONToResponsesLimited 同 ChatJSONToResponses，maxToolCalls>0 时硬截断
+// function_call 数量（Responses 规范：达到上限即停止，标记 incomplete）。
+func ChatJSONToResponsesLimited(chat map[string]any, model string, maxToolCalls int) map[string]any {
 	if model == "" {
 		model = asString(chat["model"])
 	}
@@ -720,7 +745,26 @@ func ChatJSONToResponses(chat map[string]any, model string) map[string]any {
 	if rf := asString(msg["refusal"]); rf != "" {
 		st.register(map[string]any{"id": "ref_" + hexID(24), "type": "refusal", "refusal": rf, "status": "completed"})
 	}
+	// max_tool_calls 硬截断：超出上限的 function_call 不返回（规范：达到上限即停止）
+	maxCalls := maxToolCalls
+	if maxCalls <= 0 {
+		if v, ok := chat["_max_tool_calls"].(int); ok {
+			maxCalls = v
+		}
+	}
 	for _, tci := range asList(msg["tool_calls"]) {
+		if maxCalls > 0 && len(st.items) > 0 {
+			calls := 0
+			for _, it := range st.items {
+				if it["type"] == "function_call" {
+					calls++
+				}
+			}
+			if calls >= maxCalls {
+				st.finishReason = "length"
+				break
+			}
+		}
 		tc := asMap(tci)
 		if tc == nil {
 			continue
@@ -742,4 +786,84 @@ func ChatJSONToResponses(chat map[string]any, model string) map[string]any {
 			map[string]any{"reason": "max_output_tokens"})
 	}
 	return st.responseObj("completed", st.usage, nil, nil)
+}
+
+// truncateMessages 按近似 token 上限裁掉最早的非 system 消息（truncation=auto 用）。
+// 估算：1 token ≈ 3 字节 UTF-8 中文偏保守；只裁 user/assistant/tool，保留 system。
+func truncateMessages(msgs any, limit int) []any {
+	list, ok := msgs.([]any)
+	if !ok || limit <= 0 {
+		return list
+	}
+	cost := func(m any) int {
+		mm, _ := m.(map[string]any)
+		if mm == nil {
+			return 0
+		}
+		s := asString(mm["content"])
+		return len(s)/3 + 4
+	}
+	total := 0
+	for _, m := range list {
+		total += cost(m)
+	}
+	if total <= limit {
+		return list
+	}
+	// 从前往后丢非 system 消息，直到满足上限
+	keep := make([]any, 0, len(list))
+	budget := limit
+	// 先收集 system（必须保留）
+	for _, m := range list {
+		if mm, _ := m.(map[string]any); mm != nil && asString(mm["role"]) == "system" {
+			budget -= cost(m)
+		}
+	}
+	// 再从后往前保留非 system 消息
+	var tail []any
+	for i := len(list) - 1; i >= 0; i-- {
+		m := list[i]
+		if mm, _ := m.(map[string]any); mm != nil && asString(mm["role"]) == "system" {
+			continue
+		}
+		c := cost(m)
+		if c > budget {
+			break
+		}
+		budget -= c
+		tail = append(tail, m)
+	}
+	// 反转 tail
+	for i, j := 0, len(tail)-1; i < j; i, j = i+1, j-1 {
+		tail[i], tail[j] = tail[j], tail[i]
+	}
+	for _, m := range list {
+		if mm, _ := m.(map[string]any); mm != nil && asString(mm["role"]) == "system" {
+			keep = append(keep, m)
+		}
+	}
+	return append(keep, tail...)
+}
+
+// itoa 小整数转字符串（避免为此引 strconv 影响可读性，精度够用）。
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	buf := [20]byte{}
+	i := len(buf)
+	for n > 0 {
+		i--
+		buf[i] = byte('0' + n%10)
+		n /= 10
+	}
+	if neg {
+		i--
+		buf[i] = '-'
+	}
+	return string(buf[i:])
 }
